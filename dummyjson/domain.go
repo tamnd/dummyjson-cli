@@ -2,34 +2,20 @@ package dummyjson
 
 import (
 	"context"
-	"net/url"
-	"strings"
+	"fmt"
+	"strconv"
+	"unicode"
 
 	"github.com/tamnd/any-cli/kit"
 	"github.com/tamnd/any-cli/kit/errs"
 )
 
-// domain.go exposes dummyjson as a kit Domain: a driver that a multi-domain
-// host (ant) enables with a single blank import,
-//
-//	import _ "github.com/tamnd/dummyjson-cli/dummyjson"
-//
-// exactly as a database/sql program enables a driver with `import _
-// "github.com/lib/pq"`. The init below registers it; the host then dereferences
-// dummyjson:// URIs by routing to the operations Register installs. The same
-// Domain also builds the standalone dummy binary (see cli.NewApp), so the
-// binary and a host share one source of truth.
-//
-// This is the scaffold's starting point: one resource type, "page", served by a
-// resolver op and a list op. Add your real types here as you model the site.
 func init() { kit.Register(Domain{}) }
 
-// Domain is the dummyjson driver. It carries no state; the per-run client is
-// built by the factory Register hands kit.
+// Domain is the dummyjson driver.
 type Domain struct{}
 
-// Info describes the scheme, the hostnames a pasted link is matched against, and
-// the identity reused for the binary's help and version.
+// Info describes the scheme, hostnames, and binary identity.
 func (Domain) Info() kit.DomainInfo {
 	return kit.DomainInfo{
 		Scheme: "dummyjson",
@@ -37,41 +23,50 @@ func (Domain) Info() kit.DomainInfo {
 		Identity: kit.Identity{
 			Binary: "dummy",
 			Short:  "A command line for DummyJSON fake data API.",
-			Long: `A command line for DummyJSON fake data API.
+			Long: `A command line for the DummyJSON fake data API.
 
-dummy reads public dummyjson data over plain HTTPS, shapes it into
-clean records, and prints output that pipes into the rest of your tools. No API
-key, nothing to run alongside it.`,
+dummy reads products, users, posts, todos, quotes, and recipes from
+dummyjson.com over HTTPS, shapes them into clean records, and prints output
+that pipes into the rest of your tools. No API key required.`,
 			Site: Host,
 			Repo: "https://github.com/tamnd/dummyjson-cli",
 		},
 	}
 }
 
-// Register installs the client factory and every operation onto app. A resolver
-// op (Single) names its own record type and answers `ant get`; a List op
-// enumerates a parent resource's members and answers `ant ls`.
+// Register installs the client factory and every operation onto app.
 func (Domain) Register(app *kit.App) {
 	app.SetClient(newClient)
 
-	// Resolver op: one record per id, the home of `dummy page` and
-	// `ant get dummyjson://page/<id>`.
-	kit.Handle(app, kit.OpMeta{Name: "page", Group: "read", Single: true,
-		Summary: "Fetch a page by path or URL", URIType: "page", Resolver: true,
-		Args: []kit.Arg{{Name: "ref", Help: "page path or URL"}}}, getPage)
+	kit.Handle(app, kit.OpMeta{Name: "products", Group: "read", List: true,
+		Summary: "List products (--category, --limit)"}, listProducts)
 
-	// List op: members of a page, the home of `dummy links` and `ant ls`.
-	// It emits page stubs, so every listed member is itself an addressable
-	// dummyjson://page/ URI a host can follow.
-	kit.Handle(app, kit.OpMeta{Name: "links", Group: "read", List: true,
-		Summary: "List the pages a page links to", URIType: "page",
-		Args: []kit.Arg{{Name: "ref", Help: "page path or URL"}}}, listLinks)
+	kit.Handle(app, kit.OpMeta{Name: "search", Group: "read", List: true,
+		Summary:  "Search products by keyword",
+		Args:     []kit.Arg{{Name: "query", Help: "search query"}}}, searchProducts)
+
+	kit.Handle(app, kit.OpMeta{Name: "categories", Group: "read", List: true,
+		Summary: "List product categories"}, listCategories)
+
+	kit.Handle(app, kit.OpMeta{Name: "users", Group: "read", List: true,
+		Summary: "List users (--limit)"}, listUsers)
+
+	kit.Handle(app, kit.OpMeta{Name: "posts", Group: "read", List: true,
+		Summary: "List posts (--limit)"}, listPosts)
+
+	kit.Handle(app, kit.OpMeta{Name: "todos", Group: "read", List: true,
+		Summary: "List todos (--limit)"}, listTodos)
+
+	kit.Handle(app, kit.OpMeta{Name: "quotes", Group: "read", List: true,
+		Summary: "List quotes (--limit)"}, listQuotes)
+
+	kit.Handle(app, kit.OpMeta{Name: "recipes", Group: "read", List: true,
+		Summary: "List recipes (--limit)"}, listRecipes)
 }
 
-// newClient builds the client from the host-resolved config, so a host and the
-// standalone binary pace and identify themselves the same way.
+// newClient builds the Client from kit config.
 func newClient(_ context.Context, cfg kit.Config) (any, error) {
-	c := NewClient()
+	c := DefaultConfig()
 	if cfg.UserAgent != "" {
 		c.UserAgent = cfg.UserAgent
 	}
@@ -82,92 +77,186 @@ func newClient(_ context.Context, cfg kit.Config) (any, error) {
 		c.Retries = cfg.Retries
 	}
 	if cfg.Timeout > 0 {
-		c.HTTP.Timeout = cfg.Timeout
+		c.Timeout = cfg.Timeout
 	}
-	return c, nil
+	return NewClient(c), nil
 }
 
-// --- inputs ---
-//
-// Each handler takes a typed input struct. kit fills the fields from the tags:
-// kit:"arg" is a positional argument, kit:"flag,inherit" binds the framework's
-// shared flag of the same name, and kit:"inject" receives the client newClient
-// builds.
+// --- input structs ---
 
-type pageRef struct {
-	Ref    string  `kit:"arg" help:"page path or URL"`
+type productsInput struct {
+	Category string  `kit:"flag" help:"filter by category slug"`
+	Limit    int     `kit:"flag,inherit" help:"max results" default:"10"`
+	Client   *Client `kit:"inject"`
+}
+
+type searchInput struct {
+	Query  string  `kit:"arg" help:"search query"`
+	Limit  int     `kit:"flag,inherit" help:"max results" default:"10"`
 	Client *Client `kit:"inject"`
 }
 
-type listRef struct {
-	Ref    string  `kit:"arg" help:"page path or URL"`
-	Limit  int     `kit:"flag,inherit" help:"max results"`
+type categoriesInput struct {
+	Client *Client `kit:"inject"`
+}
+
+type usersInput struct {
+	Limit  int     `kit:"flag,inherit" help:"max results" default:"10"`
+	Client *Client `kit:"inject"`
+}
+
+type postsInput struct {
+	Limit  int     `kit:"flag,inherit" help:"max results" default:"10"`
+	Client *Client `kit:"inject"`
+}
+
+type todosInput struct {
+	Limit  int     `kit:"flag,inherit" help:"max results" default:"10"`
+	Client *Client `kit:"inject"`
+}
+
+type quotesInput struct {
+	Limit  int     `kit:"flag,inherit" help:"max results" default:"10"`
+	Client *Client `kit:"inject"`
+}
+
+type recipesInput struct {
+	Limit  int     `kit:"flag,inherit" help:"max results" default:"10"`
 	Client *Client `kit:"inject"`
 }
 
 // --- handlers ---
 
-func getPage(ctx context.Context, in pageRef, emit func(*Page) error) error {
-	p, err := in.Client.GetPage(ctx, pagePath(in.Ref))
+func listProducts(ctx context.Context, in productsInput, emit func(*Product) error) error {
+	items, _, err := in.Client.ListProducts(ctx, in.Category, in.Limit)
 	if err != nil {
-		return mapErr(err)
+		return err
 	}
-	return emit(p)
-}
-
-func listLinks(ctx context.Context, in listRef, emit func(*Page) error) error {
-	pages, err := in.Client.PageLinks(ctx, pagePath(in.Ref), in.Limit)
-	if err != nil {
-		return mapErr(err)
-	}
-	for _, p := range pages {
-		if err := emit(p); err != nil {
+	for i := range items {
+		if err := emit(&items[i]); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// --- Resolver: the URI-native string functions, pure and network-free ---
-
-// Classify turns any accepted input — a bare path or a full dummyjson.com URL —
-// into the canonical (type, id), so `ant resolve` and `ant url` touch no network.
-func (Domain) Classify(input string) (uriType, id string, err error) {
-	id = pagePath(input)
-	if id == "" {
-		return "", "", errs.Usage("unrecognized dummyjson reference: %q", input)
+func searchProducts(ctx context.Context, in searchInput, emit func(*Product) error) error {
+	items, _, err := in.Client.SearchProducts(ctx, in.Query, in.Limit)
+	if err != nil {
+		return err
 	}
-	return "page", id, nil
+	for i := range items {
+		if err := emit(&items[i]); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
-// Locate is the inverse: the live https URL for a (type, id).
-func (Domain) Locate(uriType, id string) (string, error) {
-	if uriType != "page" {
-		return "", errs.Usage("dummyjson has no resource type %q", uriType)
+func listCategories(ctx context.Context, in categoriesInput, emit func(*Category) error) error {
+	items, err := in.Client.ListCategories(ctx)
+	if err != nil {
+		return err
 	}
-	return BaseURL + "/" + strings.Trim(id, "/"), nil
+	for i := range items {
+		if err := emit(&items[i]); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
-// --- helpers ---
-
-// pagePath turns any accepted input into the canonical page id: the path of a
-// full URL on this host, or a bare path with its slashes trimmed.
-func pagePath(input string) string {
-	input = strings.TrimSpace(input)
-	if u, err := url.Parse(input); err == nil && (u.Scheme == "http" || u.Scheme == "https") {
-		return strings.Trim(u.Path, "/")
+func listUsers(ctx context.Context, in usersInput, emit func(*User) error) error {
+	items, _, err := in.Client.ListUsers(ctx, in.Limit)
+	if err != nil {
+		return err
 	}
-	return strings.Trim(input, "/")
+	for i := range items {
+		if err := emit(&items[i]); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
-// mapErr converts a library error into the kit error kind that carries the right
-// exit code, so a host renders the same outcomes the standalone binary does. As
-// you add sentinel errors to the library, map them here, for example:
-//
-//	case errors.Is(err, ErrNotFound):
-//		return errs.NotFound("%s", err.Error())
-//	case errors.Is(err, ErrRateLimited):
-//		return errs.RateLimited("%s", err.Error())
-func mapErr(err error) error {
-	return err
+func listPosts(ctx context.Context, in postsInput, emit func(*Post) error) error {
+	items, _, err := in.Client.ListPosts(ctx, in.Limit)
+	if err != nil {
+		return err
+	}
+	for i := range items {
+		if err := emit(&items[i]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func listTodos(ctx context.Context, in todosInput, emit func(*Todo) error) error {
+	items, _, err := in.Client.ListTodos(ctx, in.Limit)
+	if err != nil {
+		return err
+	}
+	for i := range items {
+		if err := emit(&items[i]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func listQuotes(ctx context.Context, in quotesInput, emit func(*Quote) error) error {
+	items, _, err := in.Client.ListQuotes(ctx, in.Limit)
+	if err != nil {
+		return err
+	}
+	for i := range items {
+		if err := emit(&items[i]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func listRecipes(ctx context.Context, in recipesInput, emit func(*Recipe) error) error {
+	items, _, err := in.Client.ListRecipes(ctx, in.Limit)
+	if err != nil {
+		return err
+	}
+	for i := range items {
+		if err := emit(&items[i]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Classify turns an identifier into (type, id).
+// Numeric input -> ("product", input); otherwise -> ("query", input).
+func (Domain) Classify(input string) (string, string, error) {
+	allDigits := len(input) > 0
+	for _, r := range input {
+		if !unicode.IsDigit(r) {
+			allDigits = false
+			break
+		}
+	}
+	if allDigits {
+		if _, err := strconv.Atoi(input); err == nil {
+			return "product", input, nil
+		}
+	}
+	return "query", input, nil
+}
+
+// Locate returns the live https URL for a (type, id).
+func (Domain) Locate(t, id string) (string, error) {
+	switch t {
+	case "product":
+		return fmt.Sprintf("%s/products/%s", BaseURL, id), nil
+	case "query":
+		return fmt.Sprintf("%s/products/search?q=%s", BaseURL, id), nil
+	default:
+		return "", errs.Usage("dummyjson has no resource type %q", t)
+	}
 }

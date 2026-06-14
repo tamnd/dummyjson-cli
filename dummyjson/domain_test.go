@@ -2,13 +2,7 @@ package dummyjson
 
 import (
 	"testing"
-
-	"github.com/tamnd/any-cli/kit"
 )
-
-// These tests are offline: they exercise the URI driver's pure string functions
-// and the host wiring (mint, body, resolve), which need no network. The client's
-// HTTP behaviour is covered in dummyjson_test.go.
 
 func TestDomainInfo(t *testing.T) {
 	info := Domain{}.Info()
@@ -23,54 +17,57 @@ func TestDomainInfo(t *testing.T) {
 	}
 }
 
-func TestClassify(t *testing.T) {
-	cases := []struct{ in, typ, id string }{
-		{"wiki/Go", "page", "wiki/Go"},
-		{"/about/", "page", "about"},
-		{"https://" + Host + "/team/contact", "page", "team/contact"},
+func TestClassifyNumeric(t *testing.T) {
+	typ, id, err := Domain{}.Classify("42")
+	if err != nil {
+		t.Fatalf("Classify error: %v", err)
 	}
-	for _, tc := range cases {
-		typ, id, err := Domain{}.Classify(tc.in)
-		if err != nil || typ != tc.typ || id != tc.id {
-			t.Errorf("Classify(%q) = (%q, %q, %v), want (%q, %q, nil)",
-				tc.in, typ, id, err, tc.typ, tc.id)
-		}
+	if typ != "product" {
+		t.Errorf("type = %q, want product", typ)
+	}
+	if id != "42" {
+		t.Errorf("id = %q, want 42", id)
 	}
 }
 
-func TestLocate(t *testing.T) {
-	got, err := Domain{}.Locate("page", "wiki/Go")
-	want := "https://" + Host + "/wiki/Go"
-	if err != nil || got != want {
-		t.Errorf("Locate = (%q, %v), want (%q, nil)", got, err, want)
+func TestClassifyQuery(t *testing.T) {
+	typ, id, err := Domain{}.Classify("iphone")
+	if err != nil {
+		t.Fatalf("Classify error: %v", err)
+	}
+	if typ != "query" {
+		t.Errorf("type = %q, want query", typ)
+	}
+	if id != "iphone" {
+		t.Errorf("id = %q, want iphone", id)
 	}
 }
 
-// TestHostWiring mounts the driver in a kit Host (the runtime ant drives) and
-// checks the round trip: a record mints to its URI, its body is readable, and a
-// bare id resolves back to the same URI. The init in domain.go registers the
-// domain, so kit.Open finds it.
-func TestHostWiring(t *testing.T) {
-	h, err := kit.Open()
+func TestLocateProduct(t *testing.T) {
+	got, err := Domain{}.Locate("product", "1")
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("Locate error: %v", err)
 	}
+	want := "https://dummyjson.com/products/1"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
 
-	p := &Page{ID: "wiki/Go", URL: "https://" + Host + "/wiki/Go", Title: "Go", Body: "Go is a language."}
-	u, err := h.Mint(p)
+func TestLocateQuery(t *testing.T) {
+	got, err := Domain{}.Locate("query", "phone")
 	if err != nil {
-		t.Fatalf("Mint: %v", err)
+		t.Fatalf("Locate error: %v", err)
 	}
-	if want := "dummyjson://page/wiki/Go"; u.String() != want {
-		t.Errorf("Mint = %q, want %q", u.String(), want)
+	want := "https://dummyjson.com/products/search?q=phone"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
 	}
+}
 
-	if body, ok := h.Body(p); !ok || body == "" {
-		t.Errorf("Body = (%q, %v), want non-empty", body, ok)
-	}
-
-	got, err := h.ResolveOn("dummyjson", "about")
-	if err != nil || got.String() != "dummyjson://page/about" {
-		t.Errorf("ResolveOn = (%q, %v), want dummyjson://page/about", got.String(), err)
+func TestLocateUnknownType(t *testing.T) {
+	_, err := Domain{}.Locate("unknown", "1")
+	if err == nil {
+		t.Error("expected error for unknown type")
 	}
 }
