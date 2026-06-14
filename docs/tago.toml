@@ -1,0 +1,10 @@
+title       = "dummy"
+baseURL     = "https://dummyjson-cli.tamnd.com/"
+description = "A command line for DummyJSON fake data API."
+contentDir  = "content"
+outputDir   = "public"
+theme       = "tago-doks"
+syntaxHighlight = "true"
+
+[params]
+github = "https://github.com/tamnd/dummyjson-cli"
