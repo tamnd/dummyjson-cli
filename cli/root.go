@@ -1,4 +1,4 @@
-// Package cli assembles the dummy command tree from the dummyjson
+// Package cli assembles the dummyjson command tree from the dummyjson
 // domain on top of the any-cli/kit framework.
 package cli
 

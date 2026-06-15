@@ -1,4 +1,4 @@
-// Package dummyjson is the library behind the dummy command line:
+// Package dummyjson is the library behind the dummyjson command line:
 // the HTTP client, request shaping, and typed data models for the DummyJSON API
 // (https://dummyjson.com/).
 //
@@ -13,12 +13,13 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 )
 
 // DefaultUserAgent identifies the client to DummyJSON.
-const DefaultUserAgent = "dummy-cli/0.1.0 (github.com/tamnd/dummyjson-cli)"
+const DefaultUserAgent = "dummyjson-cli/0.1 (tamnd87@gmail.com)"
 
 // Host is the API hostname.
 const Host = "dummyjson.com"
@@ -30,16 +31,17 @@ const BaseURL = "https://" + Host
 type Product struct {
 	ID       int     `kit:"id" json:"id"`
 	Title    string  `json:"title"`
-	Price    float64 `json:"price"`
 	Category string  `json:"category"`
 	Brand    string  `json:"brand"`
+	Price    float64 `json:"price"`
 	Rating   float64 `json:"rating"`
+	Stock    int     `json:"stock"`
 }
 
 // Category is a DummyJSON product category.
 type Category struct {
-	Name string `kit:"id" json:"name"`
-	Slug string `json:"slug"`
+	Slug string `kit:"id" json:"slug"`
+	Name string `json:"name"`
 }
 
 // User is a DummyJSON user record.
@@ -48,27 +50,21 @@ type User struct {
 	FirstName string `json:"first_name"`
 	LastName  string `json:"last_name"`
 	Email     string `json:"email"`
-	Phone     string `json:"phone"`
 	Age       int    `json:"age"`
 	Gender    string `json:"gender"`
+	Username  string `json:"username"`
+	City      string `json:"city"`
+	Country   string `json:"country"`
 }
 
 // Post is a DummyJSON post record.
 type Post struct {
-	ID     int      `kit:"id" json:"id"`
-	Title  string   `json:"title"`
-	Body   string   `json:"body"`
-	Tags   []string `json:"tags"`
-	Likes  int      `json:"likes"`
-	UserID int      `json:"user_id"`
-}
-
-// Todo is a DummyJSON todo record.
-type Todo struct {
-	ID        int    `kit:"id" json:"id"`
-	Todo      string `json:"todo"`
-	Completed bool   `json:"completed"`
-	UserID    int    `json:"user_id"`
+	ID     int    `kit:"id" json:"id"`
+	Title  string `json:"title"`
+	Tags   string `json:"tags"`
+	Views  int    `json:"views"`
+	Likes  int    `json:"likes"`
+	UserID int    `json:"user_id"`
 }
 
 // Quote is a DummyJSON quote record.
@@ -80,13 +76,14 @@ type Quote struct {
 
 // Recipe is a DummyJSON recipe record.
 type Recipe struct {
-	ID          int      `kit:"id" json:"id"`
-	Name        string   `json:"name"`
-	Cuisine     string   `json:"cuisine"`
-	PrepTime    int      `json:"prep_time_min"`
-	CookTime    int      `json:"cook_time_min"`
-	Servings    int      `json:"servings"`
-	Ingredients []string `json:"ingredients"`
+	ID       int    `kit:"id" json:"id"`
+	Name     string `json:"name"`
+	Cuisine  string `json:"cuisine"`
+	Difficulty string `json:"difficulty"`
+	PrepTime int    `json:"prep_time"`
+	CookTime int    `json:"cook_time"`
+	Servings int    `json:"servings"`
+	Calories int    `json:"calories"`
 }
 
 // --- wire types for JSON decoding ---
@@ -98,6 +95,7 @@ type wireProduct struct {
 	Category string  `json:"category"`
 	Brand    string  `json:"brand"`
 	Rating   float64 `json:"rating"`
+	Stock    int     `json:"stock"`
 }
 
 func (w wireProduct) toProduct() Product {
@@ -108,17 +106,24 @@ func (w wireProduct) toProduct() Product {
 		Category: w.Category,
 		Brand:    w.Brand,
 		Rating:   w.Rating,
+		Stock:    w.Stock,
 	}
 }
 
+type wireAddress struct {
+	City    string `json:"city"`
+	Country string `json:"country"`
+}
+
 type wireUser struct {
-	ID        int    `json:"id"`
-	FirstName string `json:"firstName"`
-	LastName  string `json:"lastName"`
-	Email     string `json:"email"`
-	Phone     string `json:"phone"`
-	Age       int    `json:"age"`
-	Gender    string `json:"gender"`
+	ID        int         `json:"id"`
+	FirstName string      `json:"firstName"`
+	LastName  string      `json:"lastName"`
+	Email     string      `json:"email"`
+	Age       int         `json:"age"`
+	Gender    string      `json:"gender"`
+	Username  string      `json:"username"`
+	Address   wireAddress `json:"address"`
 }
 
 func (w wireUser) toUser() User {
@@ -127,21 +132,23 @@ func (w wireUser) toUser() User {
 		FirstName: w.FirstName,
 		LastName:  w.LastName,
 		Email:     w.Email,
-		Phone:     w.Phone,
 		Age:       w.Age,
 		Gender:    w.Gender,
+		Username:  w.Username,
+		City:      w.Address.City,
+		Country:   w.Address.Country,
 	}
 }
 
 type wirePost struct {
 	ID    int      `json:"id"`
 	Title string   `json:"title"`
-	Body  string   `json:"body"`
 	Tags  []string `json:"tags"`
 	Reactions struct {
 		Likes    int `json:"likes"`
 		Dislikes int `json:"dislikes"`
 	} `json:"reactions"`
+	Views  int `json:"views"`
 	UserID int `json:"userId"`
 }
 
@@ -149,48 +156,34 @@ func (w wirePost) toPost() Post {
 	return Post{
 		ID:     w.ID,
 		Title:  w.Title,
-		Body:   w.Body,
-		Tags:   w.Tags,
+		Tags:   strings.Join(w.Tags, ", "),
+		Views:  w.Views,
 		Likes:  w.Reactions.Likes,
 		UserID: w.UserID,
 	}
 }
 
-type wireTodo struct {
-	ID        int    `json:"id"`
-	Todo      string `json:"todo"`
-	Completed bool   `json:"completed"`
-	UserID    int    `json:"userId"`
-}
-
-func (w wireTodo) toTodo() Todo {
-	return Todo{
-		ID:        w.ID,
-		Todo:      w.Todo,
-		Completed: w.Completed,
-		UserID:    w.UserID,
-	}
-}
-
 type wireRecipe struct {
-	ID              int      `json:"id"`
-	Name            string   `json:"name"`
-	Cuisine         string   `json:"cuisine"`
-	PrepTimeMinutes int      `json:"prepTimeMinutes"`
-	CookTimeMinutes int      `json:"cookTimeMinutes"`
-	Servings        int      `json:"servings"`
-	Ingredients     []string `json:"ingredients"`
+	ID              int    `json:"id"`
+	Name            string `json:"name"`
+	Cuisine         string `json:"cuisine"`
+	Difficulty      string `json:"difficulty"`
+	PrepTimeMinutes int    `json:"prepTimeMinutes"`
+	CookTimeMinutes int    `json:"cookTimeMinutes"`
+	Servings        int    `json:"servings"`
+	CaloriesPerServing int `json:"caloriesPerServing"`
 }
 
 func (w wireRecipe) toRecipe() Recipe {
 	return Recipe{
-		ID:          w.ID,
-		Name:        w.Name,
-		Cuisine:     w.Cuisine,
-		PrepTime:    w.PrepTimeMinutes,
-		CookTime:    w.CookTimeMinutes,
-		Servings:    w.Servings,
-		Ingredients: w.Ingredients,
+		ID:         w.ID,
+		Name:       w.Name,
+		Cuisine:    w.Cuisine,
+		Difficulty: w.Difficulty,
+		PrepTime:   w.PrepTimeMinutes,
+		CookTime:   w.CookTimeMinutes,
+		Servings:   w.Servings,
+		Calories:   w.CaloriesPerServing,
 	}
 }
 
@@ -214,11 +207,6 @@ type wireUserList struct {
 
 type wirePostList struct {
 	Posts []wirePost `json:"posts"`
-	Total int        `json:"total"`
-}
-
-type wireTodoList struct {
-	Todos []wireTodo `json:"todos"`
 	Total int        `json:"total"`
 }
 
@@ -247,7 +235,7 @@ func DefaultConfig() Config {
 		BaseURL:   BaseURL,
 		UserAgent: DefaultUserAgent,
 		Rate:      200 * time.Millisecond,
-		Timeout:   30 * time.Second,
+		Timeout:   15 * time.Second,
 		Retries:   3,
 	}
 }
@@ -273,7 +261,6 @@ func (c *Client) ListProducts(ctx context.Context, category string, limit int) (
 	var rawURL string
 	params := url.Values{}
 	params.Set("limit", fmt.Sprintf("%d", limit))
-	params.Set("select", "id,title,price,category,brand,rating")
 	if category != "" {
 		rawURL = c.cfg.BaseURL + "/products/category/" + url.PathEscape(category) + "?" + params.Encode()
 	} else {
@@ -294,27 +281,11 @@ func (c *Client) ListProducts(ctx context.Context, category string, limit int) (
 	return out, resp.Total, nil
 }
 
-// GetProduct fetches a single product by ID.
-func (c *Client) GetProduct(ctx context.Context, id int) (*Product, error) {
-	rawURL := fmt.Sprintf("%s/products/%d", c.cfg.BaseURL, id)
-	body, err := c.get(ctx, rawURL)
-	if err != nil {
-		return nil, err
-	}
-	var w wireProduct
-	if err := json.Unmarshal(body, &w); err != nil {
-		return nil, fmt.Errorf("parse product %d: %w", id, err)
-	}
-	p := w.toProduct()
-	return &p, nil
-}
-
 // SearchProducts searches products by query string.
 func (c *Client) SearchProducts(ctx context.Context, q string, limit int) ([]Product, int, error) {
 	params := url.Values{}
 	params.Set("q", q)
 	params.Set("limit", fmt.Sprintf("%d", limit))
-	params.Set("select", "id,title,price,category,brand,rating")
 	rawURL := c.cfg.BaseURL + "/products/search?" + params.Encode()
 	body, err := c.get(ctx, rawURL)
 	if err != nil {
@@ -353,7 +324,6 @@ func (c *Client) ListCategories(ctx context.Context) ([]Category, error) {
 func (c *Client) ListUsers(ctx context.Context, limit int) ([]User, int, error) {
 	params := url.Values{}
 	params.Set("limit", fmt.Sprintf("%d", limit))
-	params.Set("select", "id,firstName,lastName,email,phone,age,gender")
 	rawURL := c.cfg.BaseURL + "/users?" + params.Encode()
 	body, err := c.get(ctx, rawURL)
 	if err != nil {
@@ -374,7 +344,6 @@ func (c *Client) ListUsers(ctx context.Context, limit int) ([]User, int, error) 
 func (c *Client) ListPosts(ctx context.Context, limit int) ([]Post, int, error) {
 	params := url.Values{}
 	params.Set("limit", fmt.Sprintf("%d", limit))
-	params.Set("select", "id,title,body,tags,reactions,userId")
 	rawURL := c.cfg.BaseURL + "/posts?" + params.Encode()
 	body, err := c.get(ctx, rawURL)
 	if err != nil {
@@ -387,27 +356,6 @@ func (c *Client) ListPosts(ctx context.Context, limit int) ([]Post, int, error) 
 	out := make([]Post, len(resp.Posts))
 	for i, w := range resp.Posts {
 		out[i] = w.toPost()
-	}
-	return out, resp.Total, nil
-}
-
-// ListTodos fetches a page of todos.
-func (c *Client) ListTodos(ctx context.Context, limit int) ([]Todo, int, error) {
-	params := url.Values{}
-	params.Set("limit", fmt.Sprintf("%d", limit))
-	params.Set("select", "id,todo,completed,userId")
-	rawURL := c.cfg.BaseURL + "/todos?" + params.Encode()
-	body, err := c.get(ctx, rawURL)
-	if err != nil {
-		return nil, 0, err
-	}
-	var resp wireTodoList
-	if err := json.Unmarshal(body, &resp); err != nil {
-		return nil, 0, fmt.Errorf("parse todos: %w", err)
-	}
-	out := make([]Todo, len(resp.Todos))
-	for i, w := range resp.Todos {
-		out[i] = w.toTodo()
 	}
 	return out, resp.Total, nil
 }
@@ -432,7 +380,6 @@ func (c *Client) ListQuotes(ctx context.Context, limit int) ([]Quote, int, error
 func (c *Client) ListRecipes(ctx context.Context, limit int) ([]Recipe, int, error) {
 	params := url.Values{}
 	params.Set("limit", fmt.Sprintf("%d", limit))
-	params.Set("select", "id,name,cuisine,prepTimeMinutes,cookTimeMinutes,servings,ingredients")
 	rawURL := c.cfg.BaseURL + "/recipes?" + params.Encode()
 	body, err := c.get(ctx, rawURL)
 	if err != nil {

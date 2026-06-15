@@ -12,10 +12,10 @@ ARG TARGETPLATFORM
 
 # ca-certificates for HTTPS; tzdata for sane timestamps.
 RUN apk add --no-cache ca-certificates tzdata \
- && adduser -D -H -u 10001 dummy
+ && adduser -D -H -u 10001 dummyjson
 
-COPY $TARGETPLATFORM/dummy /usr/bin/dummy
+COPY $TARGETPLATFORM/dummyjson /usr/bin/dummyjson
 
-USER dummy
+USER dummyjson
 
-ENTRYPOINT ["/usr/bin/dummy"]
+ENTRYPOINT ["/usr/bin/dummyjson"]

@@ -33,8 +33,8 @@ func TestUserAgent(t *testing.T) {
 	c := newTestClient(ts)
 	_, _, _ = c.ListProducts(context.Background(), "", 10)
 
-	if !strings.Contains(gotUA, "dummy-cli") {
-		t.Errorf("User-Agent = %q, want it to contain dummy-cli", gotUA)
+	if !strings.Contains(gotUA, "dummyjson-cli") {
+		t.Errorf("User-Agent = %q, want it to contain dummyjson-cli", gotUA)
 	}
 }
 
@@ -220,50 +220,8 @@ func TestListPosts(t *testing.T) {
 	if items[0].UserID != 121 {
 		t.Errorf("UserID = %d, want 121", items[0].UserID)
 	}
-	if len(items[0].Tags) != 2 {
-		t.Errorf("len(Tags) = %d, want 2", len(items[0].Tags))
-	}
-}
-
-// TestListTodos checks that userId is mapped to UserID.
-func TestListTodos(t *testing.T) {
-	fixture := map[string]any{
-		"todos": []any{
-			map[string]any{
-				"id":        1,
-				"todo":      "Do something nice for someone you care about",
-				"completed": false,
-				"userId":    152,
-			},
-		},
-		"total": 254,
-	}
-
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		b, _ := json.Marshal(fixture)
-		_, _ = w.Write(b)
-	}))
-	defer ts.Close()
-
-	c := newTestClient(ts)
-	items, total, err := c.ListTodos(context.Background(), 10)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if total != 254 {
-		t.Errorf("total = %d, want 254", total)
-	}
-	if len(items) != 1 {
-		t.Fatalf("len(items) = %d, want 1", len(items))
-	}
-	if items[0].Todo != "Do something nice for someone you care about" {
-		t.Errorf("Todo = %q", items[0].Todo)
-	}
-	if items[0].UserID != 152 {
-		t.Errorf("UserID = %d, want 152", items[0].UserID)
-	}
-	if items[0].Completed != false {
-		t.Errorf("Completed = true, want false")
+	if items[0].Tags != "history, american" {
+		t.Errorf("Tags = %q, want %q", items[0].Tags, "history, american")
 	}
 }
 
@@ -307,13 +265,14 @@ func TestListRecipes(t *testing.T) {
 	fixture := map[string]any{
 		"recipes": []any{
 			map[string]any{
-				"id":              1,
-				"name":            "Classic Margherita Pizza",
-				"cuisine":         "Italian",
-				"prepTimeMinutes": 20,
-				"cookTimeMinutes": 15,
-				"servings":        4,
-				"ingredients":     []string{"Pizza dough", "Tomato sauce", "Mozzarella"},
+				"id":                 1,
+				"name":               "Classic Margherita Pizza",
+				"cuisine":            "Italian",
+				"difficulty":         "Easy",
+				"prepTimeMinutes":    20,
+				"cookTimeMinutes":    15,
+				"servings":           4,
+				"caloriesPerServing": 300,
 			},
 		},
 		"total": 50,
@@ -343,10 +302,13 @@ func TestListRecipes(t *testing.T) {
 		t.Errorf("CookTime = %d, want 15", items[0].CookTime)
 	}
 	if items[0].Cuisine != "Italian" {
-		t.Errorf("Cuisine = %q", items[0].Cuisine)
+		t.Errorf("Cuisine = %q, want Italian", items[0].Cuisine)
 	}
-	if len(items[0].Ingredients) != 3 {
-		t.Errorf("len(Ingredients) = %d, want 3", len(items[0].Ingredients))
+	if items[0].Difficulty != "Easy" {
+		t.Errorf("Difficulty = %q, want Easy", items[0].Difficulty)
+	}
+	if items[0].Calories != 300 {
+		t.Errorf("Calories = %d, want 300", items[0].Calories)
 	}
 }
 
