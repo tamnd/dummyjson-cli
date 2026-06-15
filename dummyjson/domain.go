@@ -21,11 +21,11 @@ func (Domain) Info() kit.DomainInfo {
 		Scheme: "dummyjson",
 		Hosts:  []string{Host},
 		Identity: kit.Identity{
-			Binary: "dummy",
+			Binary: "dummyjson",
 			Short:  "A command line for DummyJSON fake data API.",
 			Long: `A command line for the DummyJSON fake data API.
 
-dummy reads products, users, posts, todos, quotes, and recipes from
+dummyjson reads products, users, posts, quotes, and recipes from
 dummyjson.com over HTTPS, shapes them into clean records, and prints output
 that pipes into the rest of your tools. No API key required.`,
 			Site: Host,
@@ -53,9 +53,6 @@ func (Domain) Register(app *kit.App) {
 
 	kit.Handle(app, kit.OpMeta{Name: "posts", Group: "read", List: true,
 		Summary: "List posts (--limit)"}, listPosts)
-
-	kit.Handle(app, kit.OpMeta{Name: "todos", Group: "read", List: true,
-		Summary: "List todos (--limit)"}, listTodos)
 
 	kit.Handle(app, kit.OpMeta{Name: "quotes", Group: "read", List: true,
 		Summary: "List quotes (--limit)"}, listQuotes)
@@ -106,11 +103,6 @@ type usersInput struct {
 }
 
 type postsInput struct {
-	Limit  int     `kit:"flag,inherit" help:"max results" default:"10"`
-	Client *Client `kit:"inject"`
-}
-
-type todosInput struct {
 	Limit  int     `kit:"flag,inherit" help:"max results" default:"10"`
 	Client *Client `kit:"inject"`
 }
@@ -181,19 +173,6 @@ func listUsers(ctx context.Context, in usersInput, emit func(*User) error) error
 
 func listPosts(ctx context.Context, in postsInput, emit func(*Post) error) error {
 	items, _, err := in.Client.ListPosts(ctx, in.Limit)
-	if err != nil {
-		return err
-	}
-	for i := range items {
-		if err := emit(&items[i]); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func listTodos(ctx context.Context, in todosInput, emit func(*Todo) error) error {
-	items, _, err := in.Client.ListTodos(ctx, in.Limit)
 	if err != nil {
 		return err
 	}

@@ -9,25 +9,25 @@
 # image; each manager lights up the moment its repository and token exist.
 version: 2
 
-project_name: dummy
+project_name: dummyjson
 
 before:
   hooks:
     - go mod download
 
 builds:
-  - id: dummy
-    binary: dummy
-    main: ./cmd/dummy
+  - id: dummyjson
+    binary: dummyjson
+    main: ./cmd/dummyjson
     env:
       - CGO_ENABLED=0
     flags:
       - -trimpath
     ldflags:
       - -s -w
-      - -X github.com/tamnd/dummyjson-cli/cli.Version={{ .Version }}
-      - -X github.com/tamnd/dummyjson-cli/cli.Commit={{ .ShortCommit }}
-      - -X github.com/tamnd/dummyjson-cli/cli.Date={{ .CommitDate }}
+      - -X github.com/tamnd/dummyjsonjson-cli/cli.Version={{ .Version }}
+      - -X github.com/tamnd/dummyjsonjson-cli/cli.Commit={{ .ShortCommit }}
+      - -X github.com/tamnd/dummyjsonjson-cli/cli.Date={{ .CommitDate }}
     mod_timestamp: "{{ .CommitTimestamp }}"
     targets:
       - linux_amd64
@@ -43,7 +43,7 @@ builds:
 
 archives:
   - id: default
-    name_template: "dummy_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ . }}{{ end }}"
+    name_template: "dummyjson_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ . }}{{ end }}"
     format_overrides:
       - goos: windows
         formats: [zip]
@@ -53,10 +53,10 @@ archives:
 
 nfpms:
   - id: linux-packages
-    package_name: dummy
+    package_name: dummyjson
     file_name_template: "{{ .ConventionalFileName }}"
     vendor: tamnd
-    homepage: https://github.com/tamnd/dummyjson-cli
+    homepage: https://github.com/tamnd/dummyjsonjson-cli
     maintainer: Duc-Tam Nguyen <tamnd87@gmail.com>
     description: A command line for DummyJSON fake data API.
     license: Apache-2.0
@@ -68,11 +68,11 @@ nfpms:
     section: utils
     contents:
       - src: ./LICENSE
-        dst: /usr/share/doc/dummy/LICENSE
+        dst: /usr/share/doc/dummyjson/LICENSE
 
 dockers_v2:
   - images:
-      - ghcr.io/tamnd/dummy
+      - ghcr.io/tamnd/dummyjson
     tags:
       - "{{ .Version }}"
       - latest
@@ -83,20 +83,20 @@ dockers_v2:
     labels:
       org.opencontainers.image.title: "{{ .ProjectName }}"
       org.opencontainers.image.description: "A command line for DummyJSON fake data API."
-      org.opencontainers.image.url: "https://github.com/tamnd/dummyjson-cli"
-      org.opencontainers.image.source: "https://github.com/tamnd/dummyjson-cli"
+      org.opencontainers.image.url: "https://github.com/tamnd/dummyjsonjson-cli"
+      org.opencontainers.image.source: "https://github.com/tamnd/dummyjsonjson-cli"
       org.opencontainers.image.version: "{{ .Version }}"
       org.opencontainers.image.revision: "{{ .FullCommit }}"
       org.opencontainers.image.licenses: "Apache-2.0"
 
 homebrew_casks:
-  - name: dummy
+  - name: dummyjson
     repository:
       owner: tamnd
       name: homebrew-tap
       token: '{{ envOrDefault "HOMEBREW_TAP_GITHUB_TOKEN" "" }}'
     directory: Casks
-    homepage: https://github.com/tamnd/dummyjson-cli
+    homepage: https://github.com/tamnd/dummyjsonjson-cli
     description: A command line for DummyJSON fake data API.
     skip_upload: '{{ if envOrDefault "HOMEBREW_TAP_GITHUB_TOKEN" "" }}false{{ else }}true{{ end }}'
     commit_author:
@@ -108,7 +108,7 @@ scoops:
       owner: tamnd
       name: scoop-bucket
       token: '{{ envOrDefault "SCOOP_BUCKET_GITHUB_TOKEN" "" }}'
-    homepage: https://github.com/tamnd/dummyjson-cli
+    homepage: https://github.com/tamnd/dummyjsonjson-cli
     description: A command line for DummyJSON fake data API.
     license: Apache-2.0
     skip_upload: '{{ if envOrDefault "SCOOP_BUCKET_GITHUB_TOKEN" "" }}false{{ else }}true{{ end }}'
@@ -168,6 +168,6 @@ changelog:
 release:
   github:
     owner: tamnd
-    name: dummyjson-cli
+    name: dummyjsonjson-cli
   draft: false
   prerelease: auto

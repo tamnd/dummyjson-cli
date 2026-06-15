@@ -12,8 +12,8 @@ func TestDomainInfo(t *testing.T) {
 	if len(info.Hosts) == 0 || info.Hosts[0] != Host {
 		t.Errorf("Hosts = %v, want [%s]", info.Hosts, Host)
 	}
-	if info.Identity.Binary != "dummy" {
-		t.Errorf("Identity.Binary = %q, want dummy", info.Identity.Binary)
+	if info.Identity.Binary != "dummyjson" {
+		t.Errorf("Identity.Binary = %q, want dummyjson", info.Identity.Binary)
 	}
 }
 
